@@ -8,5 +8,6 @@ Instead of hardcoding attacks, Stealth Hunter uses a Drop-In Architecture. Simpl
  * Root-Level Rate Limiting: A centralized, global gatekeeper ensures attacks are throttled (with optional jitter) to evade Web Application Firewalls (WAFs) and keep the target server stable.
  * Stop-on-Success Logic: Time is critical in bug hunting. The moment a vulnerability is validated, the orchestrator immediately halts all further scans, logging the evidence and preventing unnecessary noise.
  * Sequential Execution: Attacks are launched strictly one-by-one, providing high-accuracy results and eliminating the false positives commonly caused by heavy parallel scanning.
-⚠️ Disclaimer
+   
+# ⚠️ Disclaimer
 > Strictly for Authorized Testing: This tool is designed exclusively for educational purposes, authorized penetration testing, and ethical bug bounty hunting. Never run this software against a system or network without explicit, written permission from the owner.
