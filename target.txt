@@ -1,0 +1,14 @@
+# ==========================================
+# Stealth Hunter - Target List
+# ==========================================
+# Add your target URLs or IP addresses below.
+# Place exactly one target per line.
+# Lines starting with '#' will be ignored.
+# ==========================================
+
+[INSERT_TARGET_URL_HERE]
+# [INSERT_ANOTHER_TARGET_URL_HERE]
+
+# Examples:
+# http://192.168.1.50
+# https://staging.example.com
