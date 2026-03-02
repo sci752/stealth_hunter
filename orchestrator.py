@@ -1,0 +1,115 @@
+import sys
+import json
+import time
+from datetime import datetime
+from rate_limiter import limiter
+from core.auto_discovery import get_attack_modules
+
+def load_targets() -> list:
+    """Dynamically imports and parses single or multiple targets from target.py."""
+    try:
+        import target as config
+        targets = []
+        
+        # Support for a list of targets (Future-proofing)
+        if hasattr(config, 'TARGET_URLS') and isinstance(config.TARGET_URLS, list):
+            targets.extend(config.TARGET_URLS)
+        
+        # Support for a single target string
+        if hasattr(config, 'TARGET_URL') and isinstance(config.TARGET_URL, str):
+            if config.TARGET_URL not in targets:
+                targets.append(config.TARGET_URL)
+                
+        if not targets:
+            print("[!] Error: No valid 'TARGET_URL' or 'TARGET_URLS' found in target.py.")
+            sys.exit(1)
+            
+        return targets
+        
+    except ImportError:
+        print("[!] Error: target.py configuration file is missing from the root directory.")
+        sys.exit(1)
+
+def generate_evidence_report(target: str, result) -> str:
+    """Generates a structured JSON report when a vulnerability is confirmed."""
+    report_data = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "target": target,
+        "module": result.module_name,
+        "severity": result.severity.value,
+        "description": result.description,
+        "evidence": result.evidence
+    }
+    
+    # Creates a unique filename based on the timestamp
+    filename = f"confirmed_vuln_{int(time.time())}.json"
+    
+    with open(filename, "w") as f:
+        json.dump(report_data, f, indent=4)
+        
+    return filename
+
+def run_enterprise_hunt():
+    print("""
+    ================================================
+       STEALTH HUNTER : ENTERPRISE ORCHESTRATOR
+    ================================================
+    """)
+    
+    targets = load_targets()
+    modules = get_attack_modules("attacks")
+    
+    if not modules:
+        print("[!] Fatal: No valid attack templates discovered. Halting.")
+        sys.exit(1)
+        
+    print(f"[*] Loaded Scope: {len(targets)} Target(s)")
+    print(f"[*] Arsenal:      {len(modules)} Active Module(s)\n")
+
+    try:
+        # Loop through every target in your scope
+        for target_url in targets:
+            print(f"========== ENGAGING TARGET: {target_url} ==========")
+            
+            # Loop through every attack module for the current target
+            for attack_func in modules:
+                
+                # 1. The Global Gatekeeper (Anti-Ban mechanism)
+                limiter.wait()
+                
+                module_name = attack_func.__module__.split('.')[-1]
+                print(f"[>] Executing: {module_name}".ljust(50), end="\r")
+                
+                try:
+                    # 2. Execute the isolated module
+                    result = attack_func(target_url)
+                    
+                    # 3. The Short-Circuit & Reporting Logic
+                    if result.is_vulnerable:
+                        print(f"\n\n[!!!] {result.severity.value} VULNERABILITY CONFIRMED [!!!]")
+                        print(f"Target:    {target_url}")
+                        print(f"Module:    {result.module_name}")
+                        print(f"Details:   {result.description}")
+                        
+                        # Generate the automated JSON report
+                        report_file = generate_evidence_report(target_url, result)
+                        print(f"[*] Evidence saved to local file: {report_file}\n")
+                        
+                        print("[*] ORCHESTRATOR HALT: Mission accomplished. Terminating matrix.")
+                        sys.exit(0)
+                        
+                except Exception as module_error:
+                    # Fault Tolerance: A broken module won't crash the whole scanner
+                    print(f"\n[!] Warning: Module '{module_name}' crashed -> {module_error}")
+                    continue 
+
+            print(f"\n[+] Target {target_url} scan complete. System secure against current arsenal.\n")
+
+    except KeyboardInterrupt:
+        # Graceful degradation on manual exit (Ctrl+C)
+        print("\n\n[!] Keyboard Interrupt detected. Spinning down orchestrator safely...")
+        sys.exit(0)
+
+if __name__ == "__main__":
+    run_enterprise_hunt()
+  
