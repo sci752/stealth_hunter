@@ -1,0 +1,52 @@
+# ==========================================
+# GITHUB ToS & SAFETY PROTECTION
+# ==========================================
+
+# 1. Target Data (Prevents leaking who you are scanning)
+target.txt
+targets.json
+ips.txt
+scope.txt
+
+# 2. Scan Results & "Loot" (Prevents hosting exploited data)
+results/
+reports/
+loot/
+evidence/
+scans/
+*.log
+
+# 3. Credentials & API Keys (Prevents leaking your own access)
+.env
+.env.*
+credentials.json
+api_keys.txt
+secret*.py
+
+# 4. Compiled Payloads (Prevents triggering automated malware flags)
+*.exe
+*.dll
+*.so
+*.bin
+*.elf
+
+# ==========================================
+# STANDARD PYTHON EXCLUSIONS
+# ==========================================
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
