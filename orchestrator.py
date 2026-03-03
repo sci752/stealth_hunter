@@ -4,9 +4,20 @@ import time
 from datetime import datetime
 from rate_limiter import limiter
 from core.auto_discovery import get_attack_modules
+from core.scope_manager import load_mass_scope
+from core.auth_manager import auth
 
 def load_targets() -> list:
-    """Dynamically imports and parses single or multiple targets from target.py."""
+    """
+    Enterprise Target Ingestion.
+    Attempts to load mass scopes from scope.txt first, falling back to target.py.
+    """
+    # 1. Attempt Mass Ingestion via Scope Manager
+    mass_targets = load_mass_scope("scope.txt")
+    if mass_targets:
+        return mass_targets
+        
+    # 2. Fallback to Local Configuration (target.py)
     try:
         import target as config
         targets = []
@@ -21,13 +32,13 @@ def load_targets() -> list:
                 targets.append(config.TARGET_URL)
                 
         if not targets:
-            print("[!] Critical Error: No valid 'TARGET_URL' or 'TARGET_URLS' found in target.py.")
+            print("[!] Critical Error: No valid targets found in scope.txt or target.py.")
             sys.exit(1)
             
         return targets
         
     except ImportError:
-        print("[!] Critical Error: target.py configuration file is missing from the root directory.")
+        print("[!] Critical Error: Neither scope.txt nor target.py found in the root directory.")
         sys.exit(1)
 
 def generate_evidence_report(target: str, result) -> str:
@@ -58,6 +69,8 @@ def run_enterprise_hunt():
     ================================================
     """)
     
+    # Pre-Flight Checks
+    auth.check_auth_status()  # Check if we are running unauthenticated or as Admin/User
     targets = load_targets()
     modules = get_attack_modules("attacks")
     
@@ -69,7 +82,7 @@ def run_enterprise_hunt():
     print(f"[*] Arsenal:      {len(modules)} Active Module(s)\n")
 
     try:
-        # Loop through every target in your scope
+        # Loop through every target in your massive scope
         for target_url in targets:
             print(f"========== ENGAGING TARGET: {target_url} ==========")
             
@@ -122,4 +135,4 @@ def run_enterprise_hunt():
 
 if __name__ == "__main__":
     run_enterprise_hunt()
-    
+            
