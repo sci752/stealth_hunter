@@ -20,8 +20,7 @@ Standard scanners break when they hit zero-trust environments or aggressive fire
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/yourusername/stealth_hunter.git](https://github.com/yourusername/stealth_hunter.git)
-   cd stealth_hunter
+   git clone [https://github.com/sci752/coding_project_6_stealth_hunter.git]
 
  * Install dependencies:
    pip install fastapi uvicorn requests pydantic
