@@ -11,7 +11,7 @@ def load_targets() -> list:
         import target as config
         targets = []
         
-        # Support for a list of targets (Future-proofing)
+        # Support for an array of targets
         if hasattr(config, 'TARGET_URLS') and isinstance(config.TARGET_URLS, list):
             targets.extend(config.TARGET_URLS)
         
@@ -21,13 +21,13 @@ def load_targets() -> list:
                 targets.append(config.TARGET_URL)
                 
         if not targets:
-            print("[!] Error: No valid 'TARGET_URL' or 'TARGET_URLS' found in target.py.")
+            print("[!] Critical Error: No valid 'TARGET_URL' or 'TARGET_URLS' found in target.py.")
             sys.exit(1)
             
         return targets
         
     except ImportError:
-        print("[!] Error: target.py configuration file is missing from the root directory.")
+        print("[!] Critical Error: target.py configuration file is missing from the root directory.")
         sys.exit(1)
 
 def generate_evidence_report(target: str, result) -> str:
@@ -38,7 +38,9 @@ def generate_evidence_report(target: str, result) -> str:
         "module": result.module_name,
         "severity": result.severity.value,
         "description": result.description,
-        "evidence": result.evidence
+        "evidence": result.evidence,
+        "execution_time_ms": result.execution_time_ms,
+        "metadata": result.metadata
     }
     
     # Creates a unique filename based on the timestamp
@@ -77,14 +79,22 @@ def run_enterprise_hunt():
                 # 1. The Global Gatekeeper (Anti-Ban mechanism)
                 limiter.wait()
                 
+                # 2. Fetch real-time telemetry from the rate limiter
+                rate_status = limiter.status()
+                delay_str = f"{rate_status['delay_seconds']}s"
+                waf_flag = "[THROTTLED] " if rate_status['is_throttled'] else ""
+                
                 module_name = attack_func.__module__.split('.')[-1]
-                print(f"[>] Executing: {module_name}".ljust(50), end="\r")
+                
+                # HUD Output: Shows delay, WAF status, and current module
+                status_line = f"[>] {waf_flag}Delay: {delay_str} | Executing: {module_name}"
+                print(status_line.ljust(75), end="\r")
                 
                 try:
-                    # 2. Execute the isolated module
+                    # 3. Execute the isolated module
                     result = attack_func(target_url)
                     
-                    # 3. The Short-Circuit & Reporting Logic
+                    # 4. The Short-Circuit & Reporting Logic
                     if result.is_vulnerable:
                         print(f"\n\n[!!!] {result.severity.value} VULNERABILITY CONFIRMED [!!!]")
                         print(f"Target:    {target_url}")
@@ -112,4 +122,4 @@ def run_enterprise_hunt():
 
 if __name__ == "__main__":
     run_enterprise_hunt()
-  
+    
