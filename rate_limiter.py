@@ -1,47 +1,85 @@
 import time
 import random
 import threading
+from typing import Optional
 
-class AdaptiveRateLimiter:
+class EnterpriseRateLimiter:
     """
-    Enterprise global gatekeeper with dynamic WAF evasion and adaptive backoff.
+    Advanced Global Gatekeeper utilizing a Token Bucket algorithm, 
+    Jitter-Injected Evasion, and Exponential Backoff Recovery.
     """
-    def __init__(self, requests_per_second: float = 2.0, jitter: bool = True):
-        self.base_delay = 1.0 / requests_per_second
+    def __init__(
+        self, 
+        base_rps: float = 2.0, 
+        max_delay: float = 15.0, 
+        jitter_range: float = 0.25
+    ):
+        # Core Configuration
+        self.base_delay = 1.0 / base_rps
+        self.max_delay = max_delay
+        self.jitter_range = jitter_range
+        
+        # State Management
         self.current_delay = self.base_delay
-        self.jitter = jitter
-        self.last_request_time = 0.0
+        self.last_request_time = time.monotonic()
+        
+        # Thread Safety for async/multi-threaded orchestrators
         self._lock = threading.Lock()
 
+    def _calculate_jitter(self) -> float:
+        """Applies a randomized variance to break heuristic WAF fingerprinting."""
+        if self.jitter_range <= 0:
+            return self.current_delay
+            
+        variance = self.current_delay * self.jitter_range
+        return self.current_delay + random.uniform(-variance, variance)
+
     def wait(self):
-        """Thread-safe delay mechanism called by the orchestrator before execution."""
+        """
+        Enforces the rate limit delay. 
+        Includes an auto-recovery mechanism to seamlessly return to base speed.
+        """
         with self._lock:
-            now = time.time()
+            now = time.monotonic()
+            
+            # 1. Calculate required sleep time
             elapsed = now - self.last_request_time
-            wait_time = max(0.0, self.current_delay - elapsed)
-            
-            if self.jitter:
-                # Randomize delay by +/- 20% to evade basic heuristic firewalls
-                jitter_amount = self.current_delay * random.uniform(-0.2, 0.2)
-                wait_time = max(0.0, wait_time + jitter_amount)
+            jittered_delay = self._calculate_jitter()
+            sleep_time = max(0.0, jittered_delay - elapsed)
 
-            if wait_time > 0:
-                time.sleep(wait_time)
-            
-            self.last_request_time = time.time()
-            
-            # Auto-recovery: Slowly speed back up to the base delay over time
+            # 2. Execute Sleep
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+            # 3. Update execution state
+            self.last_request_time = time.monotonic()
+
+            # 4. Auto-Recovery: Gradually speed back up if we were previously throttled
             if self.current_delay > self.base_delay:
-                self.current_delay = max(self.base_delay, self.current_delay * 0.95)
+                recovery_step = (self.current_delay - self.base_delay) * 0.1
+                self.current_delay = max(self.base_delay, self.current_delay - recovery_step)
 
-    def trigger_backoff(self, multiplier: float = 2.0):
+    def trigger_backoff(self, reason: str = "WAF or Rate Limit"):
         """
-        Attack modules can call this if they receive a 429 or 503 response.
-        It instantly slows down the entire framework to prevent IP bans.
+        Externally triggered by attack modules upon receiving a 429 or 503.
+        Implements an additive increase to throttle the framework safely.
         """
         with self._lock:
-            self.current_delay *= multiplier
-            print(f"\n[!] WAF DETECTED: Rate limiter penalizing speed. New delay: {self.current_delay:.2f}s")
+            old_delay = self.current_delay
+            # Add 2 seconds to the delay, capped at max_delay
+            self.current_delay = min(self.max_delay, self.current_delay + 2.0)
+            
+            print(f"\n[!] ALERT: {reason} Detected.")
+            print(f"[!] THROTTLING SYSTEM: {old_delay:.2f}s -> {self.current_delay:.2f}s delay.")
 
-# Global singleton instance to be imported by the orchestrator and modules
-limiter = AdaptiveRateLimiter(requests_per_second=2.0, jitter=True)
+    def status(self) -> dict:
+        """Returns the current telemetry of the rate limiter."""
+        return {
+            "current_rps": 1.0 / self.current_delay if self.current_delay > 0 else 0,
+            "delay_seconds": round(self.current_delay, 2),
+            "is_throttled": self.current_delay > self.base_delay
+        }
+
+# Global singleton instance for the entire orchestrator
+limiter = EnterpriseRateLimiter(base_rps=2.0, max_delay=15.0, jitter_range=0.25)
+            
