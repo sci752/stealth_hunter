@@ -3,7 +3,8 @@
 # ==========================================
 
 # The primary target for the orchestrator
-TARGET_URL = "http://127.0.0.1:8000"
+TARGET_URL = "https://example-bounty-target.com"
+
 
 # Future-proofing: You can easily add global headers or tokens here later
 # GLOBAL_HEADERS = {
