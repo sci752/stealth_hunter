@@ -1,52 +1,80 @@
-# ==========================================
-# GITHUB ToS & SAFETY PROTECTION
-# ==========================================
-
-# 1. Target Data (Prevents leaking who you are scanning)
-target.txt
-targets.json
-ips.txt
-scope.txt
-
-# 2. Scan Results & "Loot" (Prevents hosting exploited data)
-results/
-reports/
-loot/
-evidence/
-scans/
-*.log
-
-# 3. Credentials & API Keys (Prevents leaking your own access)
+# Environment Variables - NEVER COMMIT
 .env
-.env.*
-credentials.json
-api_keys.txt
-secret*.py
+.env.local
+.env.*.local
 
-# 4. Compiled Payloads (Prevents triggering automated malware flags)
-*.exe
-*.dll
-*.so
-*.bin
-*.elf
-
-# ==========================================
-# STANDARD PYTHON EXCLUSIONS
-# ==========================================
-
-# Python Cache
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual Environments
 venv/
+ENV/
 env/
-.venv/
+.venv
 
-# IDE & OS Files
+# IDE & Editor
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.sublime-project
+.sublime-workspace
+
+# Evidence Reports (Generated during scans)
+confirmed_vuln_*.json
+evidence/
+
+# Logs
+*.log
+logs/
+stealth_hunter.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
 .DS_Store
 Thumbs.db
 
+# Sensitive Files
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.txt
+secrets.txt
+
+# Target/Scope Files (Sensitive)
+scope.txt
+targets.txt
+
+# Temporary Files
+*.tmp
+*.temp
+.tmp/
