@@ -1,90 +1,151 @@
 import sys
 import json
 import time
+import logging
+import uuid
 from datetime import datetime
 from rate_limiter import limiter
 from core.auto_discovery import get_attack_modules
 from core.scope_manager import load_mass_scope
 from core.auth_manager import auth
+import config
+
+# Setup enterprise logging
+logging.basicConfig(
+    level=logging.getLevelName(config.LOG_LEVEL),
+    format=config.LOG_FORMAT,
+    handlers=[
+        logging.StreamHandler(),  # Console output
+        logging.FileHandler(config.LOG_FILE) if config.LOG_FILE else logging.NullHandler()
+    ]
+)
+logger = logging.getLogger("Orchestrator")
+
 
 def load_targets() -> list:
     """
     Enterprise Target Ingestion.
     Attempts to load mass scopes from scope.txt first, falling back to target.py.
     """
+    logger.info("Initiating target ingestion...")
+    
     # 1. Attempt Mass Ingestion via Scope Manager
-    mass_targets = load_mass_scope("scope.txt")
+    mass_targets = load_mass_scope(config.SCOPE_FILE)
     if mass_targets:
+        logger.info(f"Loaded {len(mass_targets)} targets from {config.SCOPE_FILE}")
         return mass_targets
         
     # 2. Fallback to Local Configuration (target.py)
     try:
-        import target as config
+        import target as config_module
         targets = []
         
         # Support for an array of targets
-        if hasattr(config, 'TARGET_URLS') and isinstance(config.TARGET_URLS, list):
-            targets.extend(config.TARGET_URLS)
+        if hasattr(config_module, 'TARGET_URLS') and isinstance(config_module.TARGET_URLS, list):
+            targets.extend(config_module.TARGET_URLS)
         
         # Support for a single target string
-        if hasattr(config, 'TARGET_URL') and isinstance(config.TARGET_URL, str):
-            if config.TARGET_URL not in targets:
-                targets.append(config.TARGET_URL)
+        if hasattr(config_module, 'TARGET_URL') and isinstance(config_module.TARGET_URL, str):
+            if config_module.TARGET_URL not in targets:
+                targets.append(config_module.TARGET_URL)
                 
         if not targets:
-            print("[!] Critical Error: No valid targets found in scope.txt or target.py.")
+            logger.critical("No valid targets found in scope.txt or target.py.")
             sys.exit(1)
-            
+        
+        logger.info(f"Loaded {len(targets)} target(s) from target.py")
         return targets
         
-    except ImportError:
-        print("[!] Critical Error: Neither scope.txt nor target.py found in the root directory.")
+    except ImportError as e:
+        logger.critical(f"Neither scope.txt nor target.py found: {e}")
         sys.exit(1)
+
+
+def is_valid_url(url: str) -> bool:
+    """Validate that a URL is well-formed."""
+    from urllib.parse import urlparse
+    try:
+        result = urlparse(url.strip())
+        is_valid = all([result.scheme, result.netloc])
+        if not is_valid:
+            logger.warning(f"Invalid URL skipped: {url}")
+        return is_valid
+    except Exception as e:
+        logger.warning(f"URL validation error for '{url}': {e}")
+        return False
+
 
 def generate_evidence_report(target: str, result) -> str:
     """Generates a structured JSON report when a vulnerability is confirmed."""
-    report_data = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "target": target,
-        "module": result.module_name,
-        "severity": result.severity.value,
-        "description": result.description,
-        "evidence": result.evidence,
-        "execution_time_ms": result.execution_time_ms,
-        "metadata": result.metadata
-    }
-    
-    # Creates a unique filename based on the timestamp
-    filename = f"confirmed_vuln_{int(time.time())}.json"
-    
-    with open(filename, "w") as f:
-        json.dump(report_data, f, indent=4)
+    try:
+        # Generate unique filename with microsecond precision and optional UUID
+        timestamp = int(time.time() * 1_000_000) if config.USE_MICROSECOND_TIMESTAMPS else int(time.time())
+        uuid_suffix = f"_{uuid.uuid4().hex[:8]}" if config.USE_UUID_IN_FILENAME else ""
+        filename = f"confirmed_vuln_{timestamp}{uuid_suffix}.json"
+        filepath = f"{config.EVIDENCE_OUTPUT_DIR}/{filename}"
         
-    return filename
+        report_data = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "target": target,
+            "module": result.module_name,
+            "severity": result.severity.value if hasattr(result.severity, 'value') else result.severity,
+            "description": result.description,
+            "evidence": result.evidence,
+            "execution_time_ms": result.execution_time_ms,
+            "metadata": result.metadata
+        }
+        
+        with open(filepath, "w") as f:
+            json.dump(report_data, f, indent=4)
+        
+        logger.info(f"Evidence report saved: {filepath}")
+        return filepath
+        
+    except IOError as e:
+        logger.error(f"Failed to write evidence report: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error generating evidence report: {e}", exc_info=config.LOG_FULL_TRACEBACK)
+        return None
+
 
 def run_enterprise_hunt():
-    print("""
+    """Main orchestration loop for vulnerability scanning."""
+    logger.info("""
     ================================================
        STEALTH HUNTER : ENTERPRISE ORCHESTRATOR
     ================================================
     """)
     
     # Pre-Flight Checks
-    auth.check_auth_status()  # Check if we are running unauthenticated or as Admin/User
-    targets = load_targets()
-    modules = get_attack_modules("attacks")
-    
-    if not modules:
-        print("[!] Fatal: No valid attack templates discovered. Halting.")
-        sys.exit(1)
+    try:
+        auth.check_auth_status()
+        targets = load_targets()
         
-    print(f"[*] Loaded Scope: {len(targets)} Target(s)")
-    print(f"[*] Arsenal:      {len(modules)} Active Module(s)\n")
+        # Validate targets if configured
+        if config.VALIDATE_TARGET_URLS:
+            targets = [t for t in targets if is_valid_url(t)]
+            if not targets:
+                logger.critical("No valid targets after validation.")
+                sys.exit(1)
+        
+        modules = get_attack_modules(config.ATTACKS_DIRECTORY)
+        
+        if not modules:
+            logger.critical("No valid attack templates discovered. Halting.")
+            sys.exit(1)
+        
+        logger.info(f"Loaded Scope: {len(targets)} Target(s)")
+        logger.info(f"Arsenal: {len(modules)} Active Module(s)")
+        
+    except Exception as e:
+        logger.critical(f"Pre-flight check failed: {e}", exc_info=config.LOG_FULL_TRACEBACK)
+        sys.exit(1)
 
     try:
-        # Loop through every target in your massive scope
+        # Loop through every target in the scope
         for target_url in targets:
-            print(f"========== ENGAGING TARGET: {target_url} ==========")
+            logger.info(f"========== ENGAGING TARGET: {target_url} ==========")
             
             # Loop through every attack module for the current target
             for attack_func in modules:
@@ -101,7 +162,7 @@ def run_enterprise_hunt():
                 
                 # HUD Output: Shows delay, WAF status, and current module
                 status_line = f"[>] {waf_flag}Delay: {delay_str} | Executing: {module_name}"
-                print(status_line.ljust(75), end="\r")
+                logger.info(status_line)
                 
                 try:
                     # 3. Execute the isolated module
@@ -109,30 +170,54 @@ def run_enterprise_hunt():
                     
                     # 4. The Short-Circuit & Reporting Logic
                     if result.is_vulnerable:
-                        print(f"\n\n[!!!] {result.severity.value} VULNERABILITY CONFIRMED [!!!]")
-                        print(f"Target:    {target_url}")
-                        print(f"Module:    {result.module_name}")
-                        print(f"Details:   {result.description}")
+                        logger.critical(f"[!!!] {result.severity if isinstance(result.severity, str) else result.severity.value} VULNERABILITY CONFIRMED [!!!]")
+                        logger.critical(f"Target: {target_url}")
+                        logger.critical(f"Module: {result.module_name}")
+                        logger.critical(f"Details: {result.description}")
                         
                         # Generate the automated JSON report
-                        report_file = generate_evidence_report(target_url, result)
-                        print(f"[*] Evidence saved to local file: {report_file}\n")
+                        if config.AUTO_SAVE_EVIDENCE:
+                            report_file = generate_evidence_report(target_url, result)
+                            if report_file:
+                                logger.info(f"Evidence saved to: {report_file}")
                         
-                        print("[*] ORCHESTRATOR HALT: Mission accomplished. Terminating matrix.")
-                        sys.exit(0)
+                        # Halt or continue based on config
+                        if config.HALT_ON_FIRST_VULNERABILITY:
+                            logger.info("ORCHESTRATOR HALT: Mission accomplished. Terminating matrix.")
+                            sys.exit(0)
+                        else:
+                            logger.info("Continuing scan (HALT_ON_FIRST_VULNERABILITY=False)")
+                            continue
                         
+                except (requests.exceptions.RequestException, ConnectionError, TimeoutError) as network_error:
+                    logger.warning(f"Network error in module '{module_name}': {network_error}")
+                    continue
+                    
+                except AttributeError as attr_error:
+                    logger.warning(f"Attribute error in module '{module_name}': {attr_error}")
+                    if config.LOG_FULL_TRACEBACK:
+                        logger.debug(f"Traceback:", exc_info=True)
+                    continue
+                    
                 except Exception as module_error:
-                    # Fault Tolerance: A broken module won't crash the whole scanner
-                    print(f"\n[!] Warning: Module '{module_name}' crashed -> {module_error}")
-                    continue 
+                    logger.warning(f"Module '{module_name}' failed: {module_error}")
+                    if config.LOG_FULL_TRACEBACK:
+                        logger.debug(f"Full traceback:", exc_info=True)
+                    
+                    if not config.CONTINUE_ON_MODULE_ERROR:
+                        logger.critical("Halting due to module error (CONTINUE_ON_MODULE_ERROR=False)")
+                        sys.exit(1)
+                    continue
 
-            print(f"\n[+] Target {target_url} scan complete. System secure against current arsenal.\n")
+            logger.info(f"Target {target_url} scan complete. System secure against current arsenal.")
 
     except KeyboardInterrupt:
-        # Graceful degradation on manual exit (Ctrl+C)
-        print("\n\n[!] Keyboard Interrupt detected. Spinning down orchestrator safely...")
+        logger.info("Keyboard Interrupt detected. Spinning down orchestrator safely...")
         sys.exit(0)
+    except Exception as e:
+        logger.critical(f"Unexpected error in orchestrator loop: {e}", exc_info=config.LOG_FULL_TRACEBACK)
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     run_enterprise_hunt()
-            
