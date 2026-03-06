@@ -1,5 +1,8 @@
 # 🎯 Stealth Hunter - Setup & Usage Guide
 
+>Version: v0.1.0
+
+A modular reconnaissance and security testing framework.
 Quick start guide for getting Stealth Hunter up and running.
 
 ---
