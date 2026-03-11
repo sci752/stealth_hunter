@@ -11,8 +11,8 @@ Quick start guide for getting Stealth Hunter up and running.
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/sci752/coding_project_6_stealth_hunter.git
-cd coding_project_6_stealth_hunter
+git clone https://github.com/sci752/stealth_hunter.git
+cd stealth_hunter
 ```
 
 ### 2. Install Dependencies
