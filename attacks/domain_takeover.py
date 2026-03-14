@@ -1,5 +1,6 @@
 import time
-from core.models import ScanResult, Severityfrom core.http_client import session
+from core.models import ScanResult, Severity 
+from core.http_client import session
 from rate_limiter import limiter
 import config
 
