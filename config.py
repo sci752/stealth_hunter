@@ -18,7 +18,6 @@ load_dotenv()
 RATE_LIMITER_BASE_RPS = float(os.getenv("HUNTER_RATE_LIMIT_RPS", 2.0))
 
 # Maximum delay in seconds before backing off further.
-# If we hit this, the orchestrator will pause for extended periods.
 RATE_LIMITER_MAX_DELAY = float(os.getenv("HUNTER_RATE_LIMIT_MAX_DELAY", 15.0))
 
 # Jitter range (0.0-1.0). Randomness to evade WAF fingerprinting.
@@ -36,12 +35,12 @@ RATE_LIMITER_RECOVERY_FACTOR = 0.1
 # REQUEST CONFIGURATION
 # ============================================================================
 
-# Default timeout for all HTTP requests (seconds).
+# Default timeout for all HTTP requests (seconds). Float allows sub-second precision.
 # Prevents orchestrator from hanging on unresponsive targets.
-REQUEST_TIMEOUT_SECONDS = int(os.getenv("HUNTER_TIMEOUT", 5))
+# FIX: was int() which silently truncated float values like 5.5 → 5
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("HUNTER_TIMEOUT", 5.0))
 
 # User-Agent to send with all requests.
-# Change this if your target blocks "StealthHunter" signature.
 DEFAULT_USER_AGENT = "StealthHunter-Enterprise/1.0"
 
 # ============================================================================
@@ -49,11 +48,9 @@ DEFAULT_USER_AGENT = "StealthHunter-Enterprise/1.0"
 # ============================================================================
 
 # Stop scanning on first vulnerability found (True) or continue to find all (False)?
-# True = Fast (useful for bug bounties where you just need proof).
-# False = Thorough (useful for comprehensive security assessments).
 HALT_ON_FIRST_VULNERABILITY = True
 
-# Automatically save evidence reports to JSON? (True/False)
+# Automatically save evidence reports to JSON?
 AUTO_SAVE_EVIDENCE = True
 
 # Directory where evidence reports are saved.
@@ -96,8 +93,6 @@ LOG_FILE = os.getenv("HUNTER_LOG_FILE", None)
 # AUTHENTICATION (Zero-Trust Environment)
 # ============================================================================
 
-# These are loaded from .env by auth_manager.py
-# But we define defaults here for reference.
 HUNTER_ADMIN_JWT = os.getenv("HUNTER_ADMIN_JWT", None)
 HUNTER_USER_JWT = os.getenv("HUNTER_USER_JWT", None)
 HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", None)
@@ -107,19 +102,16 @@ HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", None)
 # ============================================================================
 
 # Use microsecond precision in filenames to avoid collisions?
-# True = confirmed_vuln_1704067200123456_abc123.json
-# False = confirmed_vuln_1704067200.json
 USE_MICROSECOND_TIMESTAMPS = True
 
-# Include UUID in evidence filename for extra safety?
+# Include UUID in evidence filename for extra uniqueness?
 USE_UUID_IN_FILENAME = True
 
 # ============================================================================
 # PERFORMANCE TUNING
 # ============================================================================
 
-# Connection pool size for requests.Session.
-# Higher = more parallel requests, but more memory/network connections.
+# Connection pool size for requests.Session (used by core/http_client.py).
 REQUESTS_POOL_CONNECTIONS = int(os.getenv("HUNTER_POOL_CONNECTIONS", 10))
 
 # Maximum connections per host in the pool.
