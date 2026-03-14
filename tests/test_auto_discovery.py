@@ -1,3 +1,4 @@
+
 import pytest
 import os
 import tempfile
@@ -426,3 +427,4 @@ def execute(target: str) -> ScanResult:
 if __name__ == "__main__":
     # Run tests with: pytest tests/test_auto_discovery.py -v
     pytest.main([__file__, "-v", "--tb=short"])
+

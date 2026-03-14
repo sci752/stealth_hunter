@@ -1,59 +1,64 @@
-import time
-import requests
-from core.models import ScanResult, Severity
+import trt 
+from core.models import ScanResult, Severityfrom core.http_client import session
 from rate_limiter import limiter
+import config
+
 
 def execute(target: str) -> ScanResult:
+    """
+    Subdomain Takeover Scanner.
+    Checks if the target domain points to an unclaimed cloud service resource.
+    """
     module_name = "Domain_Takeover_Scanner"
     start_time = time.time()
-    
-    # Fingerprints of vulnerable, unclaimed cloud providers
+
+    # Fingerprints of known unclaimed cloud provider error pages
     signatures = {
         "GitHub Pages": "There isn't a GitHub Pages site here.",
         "Heroku": "No such app",
         "AWS S3": "The specified bucket does not exist",
         "Azure": "project not found",
         "Fastly": "Fastly error: unknown domain",
-        "Ghost": "The thing you were looking for is no longer here"
+        "Ghost": "The thing you were looking for is no longer here",
     }
-    
+
     try:
-        # We enforce a strict timeout to avoid hanging on dead DNS records
-        response = requests.get(target, timeout=7)
-        
-        # WAF/Rate Limit Evasion Trigger
+        # FIX: was hardcoded timeout=7, now uses config.REQUEST_TIMEOUT_SECONDS
+        # FIX: uses shared session (connection pooling) instead of requests.get()
+        response = session.get(target, timeout=config.REQUEST_TIMEOUT_SECONDS)
+
         if response.status_code in [429, 503]:
             limiter.trigger_backoff(reason=f"WAF Block on {module_name}")
-            
+
         execution_time = round((time.time() - start_time) * 1000, 2)
-        
-        # Detection Logic: Check the response body for known unclaimed resource signatures
+
         for provider, signature in signatures.items():
             if signature in response.text:
                 return ScanResult(
                     is_vulnerable=True,
                     module_name=module_name,
                     severity=Severity.CRITICAL,
-                    description=f"Dangling DNS record detected. The domain points to an unclaimed {provider} service, allowing for immediate Subdomain Takeover.",
+                    description=(
+                        f"Dangling DNS record detected. The domain points to an unclaimed "
+                        f"{provider} service, allowing immediate Subdomain Takeover."
+                    ),
                     evidence=f"[HTTP {response.status_code}] Provider Signature Match: {provider}",
                     execution_time_ms=execution_time,
-                    metadata={"attack_type": "Subdomain Takeover", "provider": provider}
+                    metadata={"attack_type": "Subdomain Takeover", "provider": provider},
                 )
-                
-        # If no signatures match, the backend is likely secure and claimed
+
         return ScanResult(
             is_vulnerable=False,
             module_name=module_name,
             description="Domain backend active and securely claimed.",
-            execution_time_ms=execution_time
+            execution_time_ms=execution_time,
         )
-        
-    except requests.exceptions.RequestException as e:
-        # Gracefully handle domains that fail to resolve entirely
+
+    except Exception as e:
         return ScanResult(
             is_vulnerable=False,
             module_name=module_name,
             description=f"Domain resolution or connection failed: {str(e)}",
-            execution_time_ms=round((time.time() - start_time) * 1000, 2)
+            execution_time_ms=round((time.time() - start_time) * 1000, 2),
         )
-      
+
